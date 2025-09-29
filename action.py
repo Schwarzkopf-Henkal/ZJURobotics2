@@ -7,7 +7,7 @@ from zss_cmd_pb2 import Robots_Command, Robot_Command
 class Action(object):
 	def __init__(self):
 		self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-		self.command_address = ('localhost', 50001)
+		self.command_address = ('localhost', 50002)
 
 	def sendCommand(self, vx=0, vy=0, vw=0):
 		commands = Robots_Command()

@@ -96,6 +96,42 @@ class Debugger(object):
             line.FORWARD = True
             line.BACK = True
     
+    def draw_roadmap(self, package, sample_x, sample_y, road_map):
+        for (i, edges) in zip(range(len(road_map)), road_map):
+            # print(edges)
+            for edge in edges:
+                msg = package.msgs.add()
+                msg.type = Debug_Msg.LINE
+                msg.color = Debug_Msg.WHITE
+                line = msg.line
+                line.start.x = sample_x[i]
+                line.start.y = sample_y[i]
+                line.end.x = sample_x[edge]
+                line.end.y = sample_y[edge]
+                # print(sample_x[i], sample_y[i], sample_x[edge], sample_y[edge])
+                line.FORWARD = True
+                line.BACK = True
+
+    def draw_finalpath(self, package, x, y):
+        for i in range(len(x)-1):
+            msg = package.msgs.add()
+            msg.type = Debug_Msg.LINE
+            msg.color = Debug_Msg.GREEN
+            line = msg.line
+            line.start.x = x[i]
+            line.start.y = y[i]
+            line.end.x = x[i+1]
+            line.end.y = y[i+1]
+            line.FORWARD = True
+            line.BACK = True
+
+    def draw_all(self, sample_x, sample_y, road_map, path_x, path_y):
+        package = Debug_Msgs()
+        self.draw_points(package, sample_x, sample_y)
+        self.draw_roadmap(package, sample_x, sample_y, road_map)
+        self.draw_finalpath(package, path_x, path_y)
+        self.sock.sendto(package.SerializeToString(), self.debug_address)
+    
     def send(self, package):
         self.sock.sendto(package.SerializeToString(), self.debug_address)
 
