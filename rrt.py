@@ -66,8 +66,8 @@ class RRT:
         """
         self.start = self.Node(start[0], start[1])
         self.end = self.Node(goal[0], goal[1])
-        self.min_rand = rand_area[0]
-        self.max_rand = rand_area[1]
+        self.x_rand = rand_area[0]
+        self.y_rand = rand_area[1]
         if play_area is not None:
             self.play_area = self.AreaBounds(play_area)
         else:
@@ -164,8 +164,8 @@ class RRT:
     def get_random_node(self):
         if random.randint(0, 100) > self.goal_sample_rate:
             rnd = self.Node(
-                random.uniform(self.min_rand, self.max_rand),
-                random.uniform(self.min_rand, self.max_rand))
+                random.uniform(self.x_rand[0], self.x_rand[1]),
+                random.uniform(self.y_rand[0], self.y_rand[1]))
         else:  # goal point sampling
             rnd = self.Node(self.end.x, self.end.y)
         return rnd
@@ -199,7 +199,7 @@ class RRT:
         plt.plot(self.start.x, self.start.y, "xr")
         plt.plot(self.end.x, self.end.y, "xr")
         plt.axis("equal")
-        plt.axis([self.min_rand, self.max_rand, self.min_rand, self.max_rand])
+        plt.axis([self.x_rand[0], self.x_rand[1], self.y_rand[0], self.y_rand[1]])
         plt.grid(True)
         plt.pause(0.01)
 
