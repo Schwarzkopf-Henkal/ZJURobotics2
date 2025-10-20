@@ -9,6 +9,7 @@ from rrt_star import RRTStar
 from rrt_with_pathsmoothing import path_smoothing
 from bspline_smoother import BSplineSmoother, VelocityProfiler
 from trajectory_controller import TrajectoryController
+from mpc_controller import MPCController, DynamicObstaclePredictor
 # import matplotlib.pyplot as plt
 
 # 目标点序列
@@ -86,14 +87,35 @@ if __name__ == '__main__':
 	action = Action()
 	debugger = Debugger()
 	
-	# 初始化B样条平滑器和轨迹控制器
+	# 初始化控制器
 	bspline_smoother = BSplineSmoother(robot_radius=ROBOT_RADIUS)
-	trajectory_controller = TrajectoryController(
-		max_linear_vel=MAX_LINEAR_VEL,
-		max_angular_vel=MAX_ANGULAR_VEL,
-		lookahead_distance=300,  # 300mm前视距离
-		kp_angular=4.0
-	)
+	
+	# 选择控制器类型
+	USE_MPC = True  # True: MPC控制器, False: Pure Pursuit控制器
+	
+	if USE_MPC:
+		# MPC控制器 - 支持动态避障
+		controller = MPCController(
+			prediction_horizon=10,     # 预测10步
+			control_horizon=5,         # 优化5步控制量
+			dt=0.1,                    # 100ms步长
+			max_linear_vel=MAX_LINEAR_VEL,
+			max_angular_vel=MAX_ANGULAR_VEL,
+			robot_radius=ROBOT_RADIUS + 50,  # 额外安全裕度
+			safety_distance=100
+		)
+		# 障碍物预测器
+		obstacle_predictor = DynamicObstaclePredictor(history_length=5)
+		print("Using MPC Controller with dynamic obstacle avoidance")
+	else:
+		# Pure Pursuit轨迹跟踪控制器
+		controller = TrajectoryController(
+			max_linear_vel=MAX_LINEAR_VEL,
+			max_angular_vel=MAX_ANGULAR_VEL,
+			lookahead_distance=300,
+			kp_angular=4.0
+		)
+		print("Using Pure Pursuit Controller")
 	
 	sleep(1)  # wait for vision start
 	
@@ -143,8 +165,8 @@ if __name__ == '__main__':
 				
 				path = bspline_path
 				
-				# 设置轨迹控制器
-				trajectory_controller.set_trajectory(path, k=3, s=0)
+				# 设置控制器轨迹
+				controller.set_trajectory(path, k=3, s=0)
 				
 				# # 绘制路径对比图
 				# plt.figure(figsize=(12, 8))
@@ -193,17 +215,56 @@ if __name__ == '__main__':
 				# # 使用平滑后的路径进行导航
 				# path = smoothed_path
 			
-			# 使用轨迹控制器连续跟踪
+			# 主控制循环
+			current_u = 0.0  # 轨迹参数
+			
 			while True:
 				# 获取当前机器人状态
 				current_pos = np.array([vision.my_robot.x, vision.my_robot.y])
 				current_orientation = vision.my_robot.orientation
 				
-				# 计算控制指令
-				vx, vw, finished = trajectory_controller.compute_control(
-					current_pos, 
-					current_orientation
-				)
+				# 如果使用MPC,更新动态障碍物
+				if USE_MPC:
+					# 构建障碍物字典 {id: (x, y, radius)}
+					obstacles_dict = {}
+					
+					# 添加其他蓝色机器人
+					for i, robot in enumerate(vision.blue_robot[1:], start=1):
+						obs_id = f'blue_{i}'
+						obstacles_dict[obs_id] = (robot.x, robot.y, 150)
+					
+					# 添加黄色机器人
+					for i, robot in enumerate(vision.yellow_robot):
+						obs_id = f'yellow_{i}'
+						obstacles_dict[obs_id] = (robot.x, robot.y, 150)
+					
+					# 更新障碍物历史并估计速度
+					obstacle_predictor.update(obstacles_dict)
+					
+					# 获取带速度预测的障碍物列表
+					dynamic_obstacles = obstacle_predictor.get_predicted_obstacles(obstacles_dict)
+					
+					# 更新MPC控制器
+					controller.update_dynamic_obstacles(dynamic_obstacles)
+					
+					# 计算MPC控制指令
+					vx, vw, finished, debug_info = controller.compute_control(
+						current_pos,
+						current_orientation,
+						current_u
+					)
+					
+					# 更新轨迹参数
+					if 'closest_u' in debug_info:
+						current_u = debug_info['closest_u']
+					
+				else:
+					# 使用Pure Pursuit控制器
+					vx, vw, finished = controller.compute_control(
+						current_pos,
+						current_orientation
+					)
+					debug_info = controller.get_debug_info()
 				
 				if finished:
 					print(f"Reached goal {curgoal+1}")
@@ -217,23 +278,30 @@ if __name__ == '__main__':
 				# 绘制机器人位置
 				debugger.draw_circle(package, vision.my_robot.x, vision.my_robot.y, 100)
 				
-				# 绘制当前跟踪点和前视点
-				debug_info = trajectory_controller.get_debug_info()
-				if 'current_point' in debug_info:
+				# 绘制跟踪点
+				if not USE_MPC and 'current_point' in debug_info:
 					cp = debug_info['current_point']
 					tp = debug_info['target_point']
-					debugger.draw_point(package, int(cp[0]), int(cp[1]))  # 最近点
-					debugger.draw_point(package, int(tp[0]), int(tp[1]))  # 前视点
+					debugger.draw_point(package, int(cp[0]), int(cp[1]))
+					debugger.draw_point(package, int(tp[0]), int(tp[1]))
 				
 				debugger.send(package)
 				
-				# 每0.5秒打印一次调试信息
-				progress = trajectory_controller.get_progress()
-				if int(progress * 100) % 5 == 0:
-					print(f"Progress: {progress*100:.1f}%, "
-					      f"pos=({current_pos[0]:.1f},{current_pos[1]:.1f}), "
-					      f"orient={np.degrees(current_orientation):.1f}°, "
-					      f"vx={vx:.1f}, vw={vw:.2f}")
+				# 打印调试信息
+				if USE_MPC:
+					if 'progress' in debug_info and int(debug_info['progress']) % 10 == 0:
+						print(f"MPC - Progress: {debug_info['progress']:.1f}%, "
+						      f"pos=({current_pos[0]:.0f},{current_pos[1]:.0f}), "
+						      f"vx={vx:.0f}, vw={vw:.2f}, "
+						      f"cost={debug_info.get('cost', 0):.1f}, "
+						      f"obs={debug_info.get('n_obstacles', 0)}, "
+						      f"opt_time={debug_info.get('optimization_time', 0):.1f}ms")
+				else:
+					progress = controller.get_progress()
+					if int(progress * 100) % 10 == 0:
+						print(f"PurePursuit - Progress: {progress*100:.1f}%, "
+						      f"pos=({current_pos[0]:.0f},{current_pos[1]:.0f}), "
+						      f"vx={vx:.0f}, vw={vw:.2f}")
 				
 				time.sleep(0.01)
 			

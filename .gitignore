@@ -138,3 +138,5 @@ dmypy.json
 cython_debug/
 
 .vscode
+
+ego-planner-swarm-ros2_version/
