@@ -74,6 +74,8 @@ class TrajectoryController:
         self.current_u = 0.0
         self.target_u = 0.0
         
+        return self.tck  # 返回B样条参数用于可视化
+        
         print(f"Trajectory set: {len(path)} control points, {self.total_length:.1f}mm total length")
     
     def find_closest_point_on_trajectory(self, robot_pos):

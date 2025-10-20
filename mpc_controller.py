@@ -92,6 +92,8 @@ class MPCController:
         self.trajectory_length = distances.sum()
         
         print(f"Trajectory set: {len(path)} points, {self.trajectory_length:.1f}mm length")
+        
+        return self.tck  # 返回B样条参数用于可视化
     
     def update_dynamic_obstacles(self, obstacles):
         """
@@ -393,6 +395,17 @@ class MPCController:
         self.last_vx = vx_opt
         self.last_vw = vw_opt
         
+        # 预测未来状态(用于可视化)
+        predicted_states = []
+        state = current_state.copy()
+        for i in range(self.M):
+            predicted_states.append([state[0], state[1], state[2]])
+            state = self.predict_state(state, U_opt[i, 0], U_opt[i, 1])
+        # 添加剩余预测时域
+        for i in range(self.M, self.N):
+            predicted_states.append([state[0], state[1], state[2]])
+            state = self.predict_state(state, U_opt[-1, 0], U_opt[-1, 1])  # 使用最后一个控制量
+        
         # 调试信息
         debug_info = {
             'closest_u': closest_u,
@@ -400,7 +413,8 @@ class MPCController:
             'optimization_time': opt_time * 1000,  # ms
             'cost': result.fun,
             'success': result.success,
-            'n_obstacles': len(self.dynamic_obstacles)
+            'n_obstacles': len(self.dynamic_obstacles),
+            'predicted_states': predicted_states  # 添加预测轨迹用于可视化
         }
         
         return vx_opt, vw_opt, False, debug_info

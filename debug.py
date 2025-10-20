@@ -9,10 +9,10 @@ class Debugger(object):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.debug_address = ('localhost', 20001)
 
-    def draw_circle(self, package, x, y, radius=300):
+    def draw_circle(self, package, x, y, radius=300, color=None):
         msg = package.msgs.add()
         msg.type = Debug_Msg.ARC
-        msg.color = Debug_Msg.WHITE
+        msg.color = color if color is not None else Debug_Msg.WHITE
         arc = msg.arc
         arc.rectangle.point1.x = x - radius
         arc.rectangle.point1.y = y - radius
@@ -21,11 +21,48 @@ class Debugger(object):
         arc.start = 0
         arc.end = 360
         arc.FILL = True
+    
+    def draw_rrt_tree(self, package, rrt_planner):
+        """绘制RRT*树结构(灰色)"""
+        for node in rrt_planner.node_list:
+            if node.parent is not None:
+                self.draw_line(package, 
+                              node.parent.x, node.parent.y,
+                              node.x, node.y, 
+                              color=Debug_Msg.GRAY)
+    
+    def draw_path(self, package, path, color=None):
+        """绘制路径"""
+        c = color if color is not None else Debug_Msg.WHITE
+        for i in range(len(path) - 1):
+            self.draw_line(package,
+                          path[i][0], path[i][1],
+                          path[i+1][0], path[i+1][1],
+                          color=c)
+    
+    def draw_trajectory(self, package, tck, num_points=100, color=None):
+        """绘制B样条轨迹"""
+        from scipy.interpolate import splev
+        import numpy as np
+        c = color if color is not None else Debug_Msg.BLUE
+        u = np.linspace(0, 1, num_points)
+        x, y = splev(u, tck)
+        for i in range(len(x) - 1):
+            self.draw_line(package, x[i], y[i], x[i+1], y[i+1], color=c)
+    
+    def draw_prediction(self, package, predicted_states, color=None):
+        """绘制MPC预测轨迹"""
+        c = color if color is not None else Debug_Msg.YELLOW
+        for i in range(len(predicted_states) - 1):
+            self.draw_line(package,
+                          predicted_states[i][0], predicted_states[i][1],
+                          predicted_states[i+1][0], predicted_states[i+1][1],
+                          color=c)
 
-    def draw_line(self, package, x1, y1, x2, y2):
+    def draw_line(self, package, x1, y1, x2, y2, color=None):
         msg = package.msgs.add()
         msg.type = Debug_Msg.LINE
-        msg.color = Debug_Msg.WHITE
+        msg.color = color if color is not None else Debug_Msg.WHITE
         line = msg.line
         line.start.x = x1
         line.start.y = y1
@@ -34,11 +71,11 @@ class Debugger(object):
         line.FORWARD = True
         line.BACK = True
     
-    def draw_lines(self, package, x1, y1, x2, y2):
+    def draw_lines(self, package, x1, y1, x2, y2, color=None):
         for i in range(len(x1)):
             msg = package.msgs.add()
             msg.type = Debug_Msg.LINE
-            msg.color = Debug_Msg.WHITE
+            msg.color = color if color is not None else Debug_Msg.WHITE
             line = msg.line
             line.start.x = x1[i]
             line.start.y = y1[i]
@@ -47,11 +84,12 @@ class Debugger(object):
             line.FORWARD = True
             line.BACK = True
 
-    def draw_point(self, package, x, y):
+    def draw_point(self, package, x, y, color=None):
+        c = color if color is not None else Debug_Msg.WHITE
         msg = package.msgs.add()
         # line 1
         msg.type = Debug_Msg.LINE
-        msg.color = Debug_Msg.WHITE
+        msg.color = c
         line = msg.line
         line.start.x = x + 50
         line.start.y = y + 50
@@ -62,7 +100,7 @@ class Debugger(object):
         # line 2
         msg = package.msgs.add()
         msg.type = Debug_Msg.LINE
-        msg.color = Debug_Msg.WHITE
+        msg.color = c
         line = msg.line
         line.start.x = x - 50
         line.start.y = y + 50
@@ -71,12 +109,13 @@ class Debugger(object):
         line.FORWARD = True
         line.BACK = True
 
-    def draw_points(self, package, x, y):
+    def draw_points(self, package, x, y, color=None):
+        c = color if color is not None else Debug_Msg.WHITE
         for i in range(len(x)):
             # line 1
             msg = package.msgs.add()
             msg.type = Debug_Msg.LINE
-            msg.color = Debug_Msg.WHITE
+            msg.color = c
             line = msg.line
             line.start.x = x[i] + 50
             line.start.y = y[i] + 50
@@ -87,7 +126,7 @@ class Debugger(object):
             # line 2
             msg = package.msgs.add()
             msg.type = Debug_Msg.LINE
-            msg.color = Debug_Msg.WHITE
+            msg.color = c
             line = msg.line
             line.start.x = x[i] - 50
             line.start.y = y[i] + 50
